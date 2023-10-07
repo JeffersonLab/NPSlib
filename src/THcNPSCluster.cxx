@@ -52,6 +52,9 @@ void THcNPSCluster::RotateToLab(Double_t angle, TVector3& vertex, TVector3& pvec
   // Set vertex vector
   fVertex = vertex;
 
+  // Convert deg to rad
+  angle = angle * TMath::Pi() / 180.;
+
   // Rotate along y-axis, correct for vertex
   Double_t x_lab = fCenter.X()*cos(angle)  + fCenter.Z()*sin(angle) - fVertex.X();
   Double_t y_lab = fCenter.Y() - fVertex.Y();
