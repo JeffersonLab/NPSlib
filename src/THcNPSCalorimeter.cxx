@@ -912,6 +912,7 @@ void THcNPSCalorimeter::ClusterNPS_Hits(THcNPSShowerHitSet& HitSet, THcNPSShower
 
   //Define vectors to store hit blocks info
   vector<Double_t> blk_pulseInt(fNelem, -1);        //store max pulse integral for ALL blocks (by default, is -1 for all elements)
+  vector<Double_t> blk_pulseTime(fNelem, -1);       //store pulse time of largest pulse for ALL blocks (by default, is -1 for all elements)
   vector<Int_t>    good_blk_id;                     //store block id that was hit (variable-size), specifies (index hit, block_id hit)
   vector<Double_t> good_blk_pulseInt;               //store max pulse integral per block hit (if there are multiple hits) (index hit, max pulse Int)
 
@@ -933,6 +934,7 @@ void THcNPSCalorimeter::ClusterNPS_Hits(THcNPSShowerHitSet& HitSet, THcNPSShower
     // fill  vectors
     // Use energy instead of integral for clustering 10/09/2023 S.P
     blk_pulseInt[ (*ihit)->hitID() ]    =  (*ihit)->hitE();
+    blk_pulseTime[ (*ihit)->hitID() ]    =  (*ihit)->hitT();
     good_blk_id.push_back( (*ihit)->hitID() );
     good_blk_pulseInt.push_back( (*ihit)->hitE() );
     
@@ -976,9 +978,10 @@ void THcNPSCalorimeter::ClusterNPS_Hits(THcNPSShowerHitSet& HitSet, THcNPSShower
 
       //cout<< "(k-index, Neighbor Block ID) = " << k << ", " <<  fArray->GetNeighbor(good_blk_id[j], k)  << endl; 
 
-      //Check if kth neighbor block exists (is physically real) and  was actually hit (has good pulse integral)
+      //Check if kth neighbor block exists (is physically real) and  was actually hit within cluster time interval (has good pulse integral in cluster time window)
+      //M. Mathison Oct. 19, 2023: Added in time window for clustering. If two neighbor blocks have a good pulse integral, but are not in the same time window, they should be considered separate viruses.
       //if( fArray->GetNeighbor(good_blk_id[j], k)!=-1  && blk_pulseInt[ fArray->GetNeighbor(good_blk_id[j], k) ]>0 ){
-       if( fArray->GetNeighbor(good_blk_id[j], k)!=-1  && blk_hit_idx[ fArray->GetNeighbor(good_blk_id[j], k) ]!=-1 ){
+      if( fArray->GetNeighbor(good_blk_id[j], k)!=-1  && blk_hit_idx[ fArray->GetNeighbor(good_blk_id[j], k) ]!=-1 && TMath::Abs(blk_pulseTime[ fArray->GetNeighbor(good_blk_id[j], k) ] - blk_pulseTime[ good_blk_id[j] ]) < fClusterTimeWindow) {
 
 	 // cout<< "Valid Neighbor Found : (k-index, Neighbor Block ID, pulseInt) = " << k << ", " <<  fArray->GetNeighbor(good_blk_id[j], k)  << ", " << blk_pulseInt[ fArray->GetNeighbor(good_blk_id[j], k) ] << endl; 
 
@@ -1103,8 +1106,9 @@ void THcNPSCalorimeter::ClusterNPS_Hits(THcNPSShowerHitSet& HitSet, THcNPSShower
 
 	  //cout<< "(k-index, Neighbor Block ID) = " << k << ", " <<  fArray->GetNeighbor(good_blk_id[j], k)  << endl;
 	  
-	  //Check if kth neighbor block exists (is physically real) and  was actually hit (has good pulse integral)
-	  if( fArray->GetNeighbor(good_blk_id[j], k)!=-1  && blk_hit_idx[ fArray->GetNeighbor(good_blk_id[j], k) ]!=-1 ){
+	  //Check if kth neighbor block exists (is physically real) and  was actually hit within clustering time window (has good pulse integral in time window)
+          //M. Mathison Oct. 5, 2023: Added in time window for clustering. If two neighbor blocks have a good pulse integral, they should only be considered part of the same cluster if their pulses are also close to each other in time.
+	  if( fArray->GetNeighbor(good_blk_id[j], k)!=-1  && blk_hit_idx[ fArray->GetNeighbor(good_blk_id[j], k) ]!=-1 && TMath::Abs(blk_pulseTime[ fArray->GetNeighbor(good_blk_id[j], k) ] - blk_pulseTime[ good_blk_id[j] ]) < fClusterTimeWindow ){
 
 	    //cout<< "Valid Neighbor Found : (k-index, Neighbor Block ID, pulseInt) = " << k << ", " <<  fArray->GetNeighbor(good_blk_id[j], k)  << ", " << blk_pulseInt[ fArray->GetNeighbor(good_blk_id[j], k) ] << endl; 
 
