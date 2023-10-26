@@ -239,6 +239,7 @@ Int_t THcNPSCalorimeter::ReadDatabase( const TDatime& date )
       {"_cal_fv_test", &fvTest, kInt,0,1},
       {"_cal_fv_delta", &fvDelta, kDouble,0,1},
       {"_cal_ADCMode", &fADCMode, kInt, 0, 1},
+      {"_cal_cluster_time_window", &fClusterTimeWindow, kDouble, 0, 1},
       {"_cal_adc_tdc_offset", &fAdcTdcOffset, kDouble, 0, 1},
       {"_dbg_raw_cal", &fdbg_raw_cal, kInt, 0, 1},
       {"_dbg_decoded_cal", &fdbg_decoded_cal, kInt, 0, 1},
@@ -257,6 +258,7 @@ Int_t THcNPSCalorimeter::ReadDatabase( const TDatime& date )
     fdbg_clusters_cal = 0;
     fdbg_tracks_cal = 0;
     fdbg_init_cal = 0;
+    fClusterTimeWindow = 40.0; //Cluster time window set to +-40.0ns from cluster time
     fAdcTdcOffset=0.0;
     fADCMode=kADCDynamicPedestal;
     gHcParms->LoadParmValues((DBRequest*)&list, fKwPrefix.c_str());
@@ -869,6 +871,7 @@ void THcNPSCalorimeter::ClusterHits(THcNPSShowerHitSet& HitSet,
 //-----------------------------------------------------------------------------
 void THcNPSCalorimeter::ClusterNPS_Hits(THcNPSShowerHitSet& HitSet, THcNPSShowerClusterList* ClusterList) {
 
+  cout << "Calling ClusterNPS_Hits" << endl;
   /*
     C.Y. Feb 09, 2021
     Brief: This method does the Neutral Particle Spectrometer (NPS) clustering following
@@ -956,16 +959,16 @@ void THcNPSCalorimeter::ClusterNPS_Hits(THcNPSShowerHitSet& HitSet, THcNPSShower
   //Loop over ONLY NPS blocks that have a good hit to identify which of the blocks hit
   //are a local maxima (known as the virus in cellular automata method, and have the
   //highest pulse signal compared to its nearest neighbors)
-  // cout << "" << endl;
-  // cout <<  "********************************\n"
-  // "PHASE 1: VIRUS IDENTIFICATION\n"
-  // "********************************" << endl;
+   cout << "" << endl;
+   cout <<  "********************************\n"
+   "PHASE 1: VIRUS IDENTIFICATION\n"
+   "********************************" << endl;
     
   for(Int_t j=0; j < fNbBlocks; j++){ 
 
-    //cout << "--------CENTRAL J-th Block------ " << endl;
-    //cout << "(j-index, Block ID, pulseInt) = " << j << ", " << good_blk_id[j] << ", " << good_blk_pulseInt[j] << endl;   
-    //cout << "-------------------------------- " << endl;
+    cout << "--------CENTRAL J-th Block------ " << endl;
+    cout << "(j-index, Block ID, pulseInt) = " << j << ", " << good_blk_id[j] << ", " << good_blk_pulseInt[j] << endl;   
+    cout << "-------------------------------- " << endl;
     //By default, each j-th block that has a good hit is hit is considered a 
     //virus (highest pulse integral compared to nearest neighbors)
     ill[j]     = false;
@@ -978,17 +981,16 @@ void THcNPSCalorimeter::ClusterNPS_Hits(THcNPSShowerHitSet& HitSet, THcNPSShower
 
       //cout<< "(k-index, Neighbor Block ID) = " << k << ", " <<  fArray->GetNeighbor(good_blk_id[j], k)  << endl; 
 
-      //Check if kth neighbor block exists (is physically real) and  was actually hit within cluster time interval (has good pulse integral in cluster time window)
-      //M. Mathison Oct. 19, 2023: Added in time window for clustering. If two neighbor blocks have a good pulse integral, but are not in the same time window, they should be considered separate viruses.
+      //Check if kth neighbor block exists (is physically real) and  was actually hit within cluster time interval
       //if( fArray->GetNeighbor(good_blk_id[j], k)!=-1  && blk_pulseInt[ fArray->GetNeighbor(good_blk_id[j], k) ]>0 ){
-      if( fArray->GetNeighbor(good_blk_id[j], k)!=-1  && blk_hit_idx[ fArray->GetNeighbor(good_blk_id[j], k) ]!=-1 && TMath::Abs(blk_pulseTime[ fArray->GetNeighbor(good_blk_id[j], k) ] - blk_pulseTime[ good_blk_id[j] ]) < fClusterTimeWindow) {
+      if( fArray->GetNeighbor(good_blk_id[j], k)!=-1  && blk_hit_idx[ fArray->GetNeighbor(good_blk_id[j], k) ]!=-1) {
 
-	 // cout<< "Valid Neighbor Found : (k-index, Neighbor Block ID, pulseInt) = " << k << ", " <<  fArray->GetNeighbor(good_blk_id[j], k)  << ", " << blk_pulseInt[ fArray->GetNeighbor(good_blk_id[j], k) ] << endl; 
+	  cout<< "Valid Neighbor Found : (k-index, Neighbor Block ID, pulseInt) = " << k << ", " <<  fArray->GetNeighbor(good_blk_id[j], k)  << ", " << blk_pulseInt[ fArray->GetNeighbor(good_blk_id[j], k) ] << endl; 
 
 	//Check if the kth neighbor block good pulse integral is greater than the ith central block (if so, then the central block is NOT a virus)
 	 //if( blk_pulseInt[ fArray->GetNeighbor(good_blk_id[j], k) ] > blk_pulseInt[ good_blk_id[j] ] ){
 	 if( blk_pulseInt[ fArray->GetNeighbor(good_blk_id[j], k) ] > good_blk_pulseInt[j] ){
-	   //cout<< " k-th Neighbor Pulse Integral > j-th Central Block Pulse Integral | Set 'virus[j]=false' for central block !" << endl;
+	   cout<< " k-th Neighbor Pulse Integral > j-th Central Block Pulse Integral | Set 'virus[j]=false' for central block !" << endl;
 	  //set to false if ith central block is NOT a virus (If there's one neighbour with more energy, it's not a local maximum)
 	  virus[j]   = false;
 	  virustmp[j]= false;
@@ -1017,9 +1019,9 @@ void THcNPSCalorimeter::ClusterNPS_Hits(THcNPSShowerHitSet& HitSet, THcNPSShower
   Float_t pIvirus[NbClusters];
   Int_t cp = 0;   //virus counter
 
-  //cout << "-------------------" << endl;
-  //cout << "Check Virus Blocks " << endl;
-  //cout << "-------------------" << endl;
+  cout << "-------------------" << endl;
+  cout << "Check Virus Blocks " << endl;
+  cout << "-------------------" << endl;
   //Loop over all blocks that have adc hit and check if they are a virus.
   //If they are a virus, assign the corresponding pulseInt to pIvirus
   for(Int_t j=0; j<fNbBlocks; j++){
@@ -1062,10 +1064,10 @@ void THcNPSCalorimeter::ClusterNPS_Hits(THcNPSShowerHitSet& HitSet, THcNPSShower
   // PHASE 2: VIRUS CONTAMINATION
   //********************************
 
-  //cout << "" << endl;
-  //cout <<  "********************************\n"
-  //  "PHASE 2: VIRUS CONTAMINATION\n"
-  //  "********************************" << endl;
+  cout << "" << endl;
+  cout <<  "********************************\n"
+    "PHASE 2: VIRUS CONTAMINATION\n"
+    "********************************" << endl;
 
   
   //Contamination: Now that the virus cells are identified, its neighbouring cells must
@@ -1082,11 +1084,11 @@ void THcNPSCalorimeter::ClusterNPS_Hits(THcNPSShowerHitSet& HitSet, THcNPSShower
     //increment safe iterator
     safe++;
 
-    //cout << "---> Begin Safe Iteration Number =  " << safe << endl; 
+    cout << "---> Begin Safe Iteration Number =  " << safe << endl; 
      //Loop over blocks that have a hit
     for(Int_t j=0; j<fNbBlocks; j++){ 
 
-      //cout << "(j-th index, Block ID Hit, virus?, ill? ) = " << j << ", " << good_blk_id[j] << ", " << virus[j] << ", " << ill[j] << endl;
+      cout << "(j-th index, Block ID Hit, virus?, ill? ) = " << j << ", " << good_blk_id[j] << ", " << virus[j] << ", " << ill[j] << endl;
       //----BEGIN 'ILL BLOCK' CHECK-----  
 
       /*Check if block has been contaminated (ill). The virus blocks have
@@ -1096,7 +1098,7 @@ void THcNPSCalorimeter::ClusterNPS_Hits(THcNPSShowerHitSet& HitSet, THcNPSShower
       
       if(!ill[j]){   //if hit block has not been contaminated (i.e., not a virus and therefore, not ill) . . .
 
-	//cout << "NON-ILL BLOCK FOUND | j-th index, Non-Ill Block ID = " << j << ", " << good_blk_id[j] << endl;
+	cout << "NON-ILL BLOCK FOUND | j-th index, Non-Ill Block ID = " << j << ", " << good_blk_id[j] << endl;
 	//variables to store pulse int and block id of neighbor with higher pulseInt
 	Float_t max=0.;
 	Int_t nei[8];
@@ -1104,13 +1106,13 @@ void THcNPSCalorimeter::ClusterNPS_Hits(THcNPSShowerHitSet& HitSet, THcNPSShower
 	//Loop over (at most 8) neighboring blocks
 	for(Int_t k=0; k<8; k++){
 
-	  //cout<< "(k-index, Neighbor Block ID) = " << k << ", " <<  fArray->GetNeighbor(good_blk_id[j], k)  << endl;
+	  cout<< "(k-index, Neighbor Block ID) = " << k << ", " <<  fArray->GetNeighbor(good_blk_id[j], k)  << endl;
 	  
 	  //Check if kth neighbor block exists (is physically real) and  was actually hit within clustering time window (has good pulse integral in time window)
           //M. Mathison Oct. 5, 2023: Added in time window for clustering. If two neighbor blocks have a good pulse integral, they should only be considered part of the same cluster if their pulses are also close to each other in time.
 	  if( fArray->GetNeighbor(good_blk_id[j], k)!=-1  && blk_hit_idx[ fArray->GetNeighbor(good_blk_id[j], k) ]!=-1 && TMath::Abs(blk_pulseTime[ fArray->GetNeighbor(good_blk_id[j], k) ] - blk_pulseTime[ good_blk_id[j] ]) < fClusterTimeWindow ){
 
-	    //cout<< "Valid Neighbor Found : (k-index, Neighbor Block ID, pulseInt) = " << k << ", " <<  fArray->GetNeighbor(good_blk_id[j], k)  << ", " << blk_pulseInt[ fArray->GetNeighbor(good_blk_id[j], k) ] << endl; 
+	    cout<< "Valid Neighbor Found : (k-index, Neighbor Block ID, pulseInt) = " << k << ", " <<  fArray->GetNeighbor(good_blk_id[j], k)  << ", " << blk_pulseInt[ fArray->GetNeighbor(good_blk_id[j], k) ] << endl; 
 
 	    //Set pulseInt of kth neighbour block
 	    pInei[k] = pIpas[ fArray->GetNeighbor(good_blk_id[j], k) ];
@@ -1139,12 +1141,12 @@ void THcNPSCalorimeter::ClusterNPS_Hits(THcNPSShowerHitSet& HitSet, THcNPSShower
 	//Here is where the j-th hit block (that was not ill) is tagged' with the neighboring block highest pulseInt
 	pIpastmp[ good_blk_id[j] ]=max;  
 
-	//cout << "Neighbor w/ Highest Pulse Int | (Block Hit Index, PulseInt) =  " << good_blk_id[j] << " " << virus_blk << ", " << max << endl;
+	cout << "Neighbor w/ Highest Pulse Int | (Block Hit Index, PulseInt) =  " << good_blk_id[j] << " " << virus_blk << ", " << max << endl;
 	//Check if the found neighboring block (virus_blk) with the highest pulse Integral has been previously tagged as a virus 
 	if(virus[virus_blk]){
 
-	  //cout << "Neighbor w/ Highest Pulse Int is a VIRUS ! ! ! " << endl;
-	  //cout << "Set j-th block index and virustmp[j] to TRUE (Contaminate j-th block) | (j-th index, Block ID) = " << j << ", " <<  good_blk_id[j] << endl;
+	  cout << "Neighbor w/ Highest Pulse Int is a VIRUS ! ! ! " << endl;
+	  cout << "Set j-th block index and virustmp[j] to TRUE (Contaminate j-th block) | (j-th index, Block ID) = " << j << ", " <<  good_blk_id[j] << endl;
 
 	  //If the neighboring 'kth' block has been tagged as a virus, then the central 'jth' block will become ill (contaminated) with the virus
 	  ill[j]      = true;
@@ -1220,15 +1222,20 @@ void THcNPSCalorimeter::ClusterNPS_Hits(THcNPSShowerHitSet& HitSet, THcNPSShower
 	for (THcNPSShowerClusterIt k=(*cluster).begin(); k!=(*cluster).end();
 	     ++k) {
 
-	  //cout << "TESTING 1: (**i)->hitID = " << (*i)->hitID() << endl;
-	  //cout << "TESTING 2: (*k)->hitID = " << (*k)->hitID() << endl;
-	  if(pIpas[ (*i)->hitID() ] == pIpas[ (*k)->hitID() ]){
+	  cout << "TESTING 1: (*i)->hitID = " << (*i)->hitID() << ", (*i) pI = " << pIpas[ (*i)->hitID() ] << ", (*i) T = " << blk_pulseTime[ (*i)->hitID() ] << endl;
+	  cout << "TESTING 2: (*k)->hitID = " << (*k)->hitID() << ", (*k) pI = " << pIpas[ (*k)->hitID() ] << ", (*k) T = " << blk_pulseTime[ (*k)->hitID() ] << endl;
+	  cout << "TESTING 3: T diff = " << TMath::Abs(blk_pulseTime[ (*i)->hitID() ] - blk_pulseTime[ (*k)->hitID() ]) << endl;
+
+	  if(pIpas[ (*i)->hitID() ] == pIpas[ (*k)->hitID() ] && TMath::Abs(blk_pulseTime[ (*i)->hitID() ] - blk_pulseTime[ (*k)->hitID() ]) < fClusterTimeWindow){
 	    //	  if ((**i).isNeighbour(*k)) {
 	    (*cluster).insert(*i);      //If the hit #i is neighbouring a hit
-	    HitSet.erase(i);            //in the cluster, then move it
-	                                //into the cluster.
-	    clustered = true;
+	    HitSet.erase(i);            //in the cluster, and the hits are 
+	                                //within the time window,
+	    clustered = true;           //then move it into the cluster.
+	    cout << "Clustered!" << endl;
 	  }
+
+	  else cout << "NOT clustered!" << endl;
 
 	  if (clustered) break;
 	}                               //k
