@@ -24,7 +24,7 @@ jobs:
           id: meta
           uses: docker/metadata-action@v5
           with:
-            images: jeffersonlab/hallc-hcana
+            images: jeffersonlab/hallc-npslib
   
         -
           name: Login to DockerHub
@@ -46,5 +46,5 @@ jobs:
               DOCKER_TAG=${{ steps.meta.outputs.tags }}
               APP_VERSION=${{ github.ref_name}}
               REPO_NAME=${{ github.event.repository.name }}
-              HCANA_VERSION=${{env.hcana}}
+              HCANA_VERSION=${{ env.hcana }}
         
